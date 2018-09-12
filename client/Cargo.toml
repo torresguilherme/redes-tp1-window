@@ -6,3 +6,4 @@ authors = ["Guilherme Torres <guilhermetorres97@gmail.com>"]
 [dependencies]
 rand = "0.5"
 md5 = "0.3.8"
+byteorder = "1.2"

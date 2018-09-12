@@ -1,4 +1,4 @@
-use std::{u64, u32, u16, f32};
+use std::{u64, u32, u16, f32, str};
 use std::fs::File;
 use std::env;
 use std::io::{Result, BufRead, BufReader};
@@ -7,26 +7,68 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 extern crate rand;
 extern crate md5;
+extern crate byteorder;
+use rand::Rng;
+use byteorder::{BigEndian, WriteBytesExt};
 
-struct Message
-{
-    seqnum: u64,
-    timestamp: u64,
-    timestamp2: u32,
-    m_size: u16,
-    text: String,
-    hash: String
-}
-
-fn send_message(socket: UdpSocket, number: u64, address: &String, m: &String) -> Result<usize>
+fn send_message(socket: &UdpSocket, number: u64, address: &String, message: &String, p_error: f32) -> Result<usize>
 {
     // get parameters
     let start = SystemTime::now();
     let since_epoch = start.duration_since(UNIX_EPOCH).expect("Computador com defeito.");
     let seconds: u64 = since_epoch.as_secs();
     let nanoseconds: u32 = since_epoch.subsec_nanos() as u32;
-    let m_size = m.len();
-    Ok(0)
+    let m_size = message.len() as u16;
+    let mut send_buf = vec![];
+
+    // make send buffer
+    send_buf.write_u64::<BigEndian>(number).unwrap();
+    send_buf.write_u64::<BigEndian>(seconds).unwrap();
+    send_buf.write_u32::<BigEndian>(nanoseconds).unwrap();
+    send_buf.write_u16::<BigEndian>(m_size).unwrap();
+    send_buf.append(&mut message.as_bytes().to_vec());
+
+    // md5
+    let hash = md5::compute(&send_buf);
+    send_buf.append(&mut format!("{:x}", hash).as_bytes().to_vec());
+
+    // breaks md5 with p_error
+    let rng: f32 = rand::thread_rng().gen();
+    let end = send_buf.len() - 1;
+    if rng < p_error
+    {
+        send_buf[end] += 1;
+    }
+
+    // send buffer
+    let send_result = socket.send_to(&send_buf, address);
+    send_result
+}
+
+fn receive_ack(socket: &UdpSocket) -> bool
+{
+    let mut recv_buf = vec![];
+    let result = socket.recv_from(&mut recv_buf);
+    match result
+    {
+        Ok(_) => println!("Ok"),
+        Err(e) =>
+        {
+            println!("Timeout ou erro na ack");
+            return false
+        }
+    };
+    
+    // confere md5
+    let length = recv_buf.len();
+    let data = &recv_buf[0..length-32];
+    let hash = str::from_utf8(&recv_buf[length-32..length]).unwrap();
+    let right_hash = format!("{:x}", md5::compute(&data));
+    if right_hash != hash
+    {
+        return false
+    }
+    true
 }
 
 fn main() -> Result<()>
@@ -52,9 +94,11 @@ fn main() -> Result<()>
     let lines: Vec<_> = reader.lines().map(|l| l.unwrap()).collect();
 
     // set up upd socket
-    let mut socket = UdpSocket::bind("127.0.0.1:4444")?;
+    let socket = UdpSocket::bind("127.0.0.1:4444")?;
+    let result = socket.set_read_timeout(None)?;
     let mut counter: u64 = 0;
-    send_message(socket, counter, &args[2], &lines[counter as usize]);
+    send_message(&socket, counter, &args[2], &lines[counter as usize], p_error)?;
+    let ok = receive_ack(&socket);
 
     Ok(())
 }
