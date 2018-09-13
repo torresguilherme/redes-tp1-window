@@ -9,7 +9,7 @@ extern crate rand;
 extern crate md5;
 extern crate byteorder;
 use rand::Rng;
-use byteorder::{BigEndian, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 
 fn send_message(socket: &UdpSocket, number: u64, address: &String, message: &String, p_error: f32) -> Result<usize>
 {
@@ -60,9 +60,8 @@ fn receive_ack(socket: &UdpSocket) -> bool
     };
     
     // confere md5
-    let length = recv_buf.len();
-    let data = &recv_buf[0..length-32];
-    let hash = str::from_utf8(&recv_buf[length-32..length]).unwrap();
+    let data = &recv_buf[0..20];
+    let hash = str::from_utf8(&recv_buf[20..36]).unwrap();
     let right_hash = format!("{:x}", md5::compute(&data));
     if right_hash != hash
     {
