@@ -3,7 +3,7 @@ use std::fs::File;
 use std::env;
 use std::io::{Result, BufRead, BufReader};
 use std::net::UdpSocket;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
 extern crate rand;
 extern crate md5;
@@ -86,7 +86,7 @@ fn main() -> Result<()>
     let ip = ip_port[0];
     let port: u16 = ip_port[1].parse().unwrap();
     let window_size: u16 = args[3].parse().unwrap();
-    let timeout: f32 = args[4].parse().unwrap();
+    let timeout: u64 = args[4].parse().unwrap();
     let p_error: f32 = args[5].parse().unwrap();
     // file reader
     let file = File::open(file_name)?;
@@ -95,7 +95,7 @@ fn main() -> Result<()>
 
     // set up upd socket
     let socket = UdpSocket::bind("127.0.0.1:4444")?;
-    let result = socket.set_read_timeout(None)?;
+    socket.set_read_timeout(Some(Duration::new(timeout, 0)))?;
     let mut counter: u64 = 0;
     send_message(&socket, counter, &args[2], &lines[counter as usize], p_error)?;
     let ok = receive_ack(&socket);
