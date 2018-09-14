@@ -30,14 +30,21 @@ fn send_message(socket: &UdpSocket, number: u64, address: &String, message: &Str
 
     // md5
     let hash = md5::compute(&send_buf);
-    send_buf.append(&mut format!("{:x}", hash).as_bytes().to_vec());
+    send_buf.append(&mut <[u8; 16]>::from(hash).to_vec());
 
     // breaks md5 with p_error
     let rng: f32 = rand::thread_rng().gen();
     let end = send_buf.len() - 1;
     if rng < p_error
     {
-        send_buf[end] += 1;
+        if send_buf[end] == 255
+        {
+            send_buf[end] -= 1;
+        }
+        else 
+        {
+            send_buf[end] += 1;
+        }
     }
 
     // send buffer
@@ -47,7 +54,7 @@ fn send_message(socket: &UdpSocket, number: u64, address: &String, message: &Str
 
 fn receive_ack(socket: &UdpSocket) -> bool
 {
-    let mut recv_buf = vec![];
+    let mut recv_buf = vec![0; 32768];
     let result = socket.recv_from(&mut recv_buf);
     match result
     {
@@ -61,8 +68,8 @@ fn receive_ack(socket: &UdpSocket) -> bool
     
     // confere md5
     let data = &recv_buf[0..20];
-    let hash = str::from_utf8(&recv_buf[20..36]).unwrap();
-    let right_hash = format!("{:x}", md5::compute(&data));
+    let hash = recv_buf[20..36].to_vec();
+    let right_hash = <[u8; 16]>::from(md5::compute(&data)).to_vec();
     if right_hash != hash
     {
         return false

@@ -29,8 +29,8 @@ fn ack_message(socket: &UdpSocket, p_error: f32) -> Result<String>
 
     let length = recv_buf.len();
     let data = &recv_buf[0..22+string_size];
-    let received_hash = str::from_utf8(&recv_buf[22+string_size..22+string_size+16]).unwrap();
-    let right_hash = format!("{:x}", md5::compute(&data));
+    let received_hash = recv_buf[22+string_size..22+string_size+16].to_vec();
+    let right_hash = <[u8; 16]>::from(md5::compute(&data)).to_vec();
     if right_hash != received_hash
     {
         return Err(Error::new(ErrorKind::Other, "mensagem com md5 errado"));
@@ -46,14 +46,21 @@ fn ack_message(socket: &UdpSocket, p_error: f32) -> Result<String>
 
     // md5
     let hash = md5::compute(&ack_buf);
-    ack_buf.append(&mut format!("{:x}", hash).as_bytes().to_vec());
+    ack_buf.append(&mut <[u8; 16]>::from(hash).to_vec());
 
     // breaks md5 with p_error
     let rng: f32 = rand::thread_rng().gen();
     let end = ack_buf.len() - 1;
     if rng < p_error
     {
-        ack_buf[end] += 1;
+        if ack_buf[end] == 255
+        {
+            ack_buf[end] -= 1;
+        }
+        else 
+        {
+            ack_buf[end] += 1;
+        }
     }
 
     // send buffer
