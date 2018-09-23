@@ -1,7 +1,7 @@
 use std::{u64, u32, u16, f32, str};
 use std::fs::File;
 use std::env;
-use std::io::{Result, BufRead, BufReader};
+use std::io::{Result, Error, ErrorKind, Cursor, BufRead, BufReader};
 use std::net::UdpSocket;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
@@ -52,7 +52,7 @@ fn send_message(socket: &UdpSocket, number: u64, address: &String, message: &Str
     send_result
 }
 
-fn receive_ack(socket: &UdpSocket) -> bool
+fn receive_ack(socket: &UdpSocket) -> Result<u64>
 {
     let mut recv_buf = vec![0; 32768];
     let result = socket.recv_from(&mut recv_buf);
@@ -61,8 +61,7 @@ fn receive_ack(socket: &UdpSocket) -> bool
         Ok(_) => println!("Ok"),
         Err(e) =>
         {
-            println!("Timeout ou erro na ack");
-            return false
+            return Err(e);
         }
     };
     
@@ -72,9 +71,12 @@ fn receive_ack(socket: &UdpSocket) -> bool
     let right_hash = <[u8; 16]>::from(md5::compute(&data)).to_vec();
     if right_hash != hash
     {
-        return false
+        return Err(Error::new(ErrorKind::Other, "ack com md5 errado"))
     }
-    true
+    
+    let mut cursor = Cursor::new(&recv_buf);
+    let pack_number = cursor.read_u64::<BigEndian>().unwrap();
+    return Ok(pack_number);
 }
 
 fn main() -> Result<()>
@@ -96,15 +98,52 @@ fn main() -> Result<()>
     let p_error: f32 = args[5].parse().unwrap();
     // file reader
     let file = File::open(file_name)?;
-    let mut reader = BufReader::new(file);
+    let reader = BufReader::new(file);
     let lines: Vec<_> = reader.lines().map(|l| l.unwrap()).collect();
 
     // set up upd socket
     let socket = UdpSocket::bind("127.0.0.1:4444")?;
     socket.set_read_timeout(Some(Duration::new(timeout, 0)))?;
-    let mut counter: u64 = 0;
-    send_message(&socket, counter, &args[2], &lines[counter as usize], p_error)?;
-    let ok = receive_ack(&socket);
+
+    // set up package queue to send
+    let mut package_queue: Vec<u64> = vec![];
+    for i in 0..window_size
+    {
+        if (i as usize) < lines.len()
+        {
+            package_queue.push(i.into());
+        }
+    }
+    let mut next_package: u64 = if (window_size as usize) > lines.len() { lines.len() as u64 } else { window_size as u64 };
+
+    // send packages
+    while !package_queue.is_empty()
+    {
+        for i in 0..package_queue.len()
+        {
+            send_message(&socket, package_queue[i], &args[2], &lines[package_queue[i] as usize], p_error)?;
+        }
+        // get acks
+        for i in 0..package_queue.len()
+        {
+            let result = receive_ack(&socket);
+            match result
+            {
+                Ok(pack_number) =>
+                {
+                    println!("{:?} {}", package_queue, pack_number);
+                    let index = package_queue.iter().position(|&n| n == pack_number).unwrap();
+                    package_queue.remove(index);
+                    if next_package < lines.len() as u64
+                    {
+                        package_queue.push(next_package);
+                        next_package += 1;
+                    }
+                },
+                Err(e) => println!("{}", e)
+            };
+        }
+    }
 
     Ok(())
 }

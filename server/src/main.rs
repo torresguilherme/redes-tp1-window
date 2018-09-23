@@ -90,11 +90,15 @@ fn main() -> Result<()>
     let socket = UdpSocket::bind(format!("127.0.0.1:{}", port))?;
     socket.set_read_timeout(None);
 
-    let result = ack_message(&socket, p_error);
-    match result
+    while true
     {
-        Ok(message) => println!("{}", message),
-        Err(e) => println!("{}", e)
-    };
+        let result = ack_message(&socket, p_error);
+            match result
+        {
+            Ok(message) => println!("{}", message),
+            Err(e) => println!("{}", e)
+        };
+    }
+    
     Ok(())
 }
