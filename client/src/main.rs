@@ -142,7 +142,6 @@ fn main() -> Result<()>
                 {
                     Ok(pack_number) =>
                     {
-                        println!("{:?} {}", package_queue, pack_number);
                         let index = package_queue.iter().position(|&n| n == pack_number).unwrap();
                         package_queue.remove(index);
                         if next_package < lines.len() as u64
@@ -153,6 +152,66 @@ fn main() -> Result<()>
                     },
                     Err(e) => println!("{}", e)
                 };
+            }
+        }
+    }
+    else
+    {
+        let mut first_package: u64 = 0;
+        let mut last_package: u64 = if (window_size as usize) > lines.len() { lines.len() as u64 } else { window_size as u64 };
+        let mut is_package_ok: Vec<bool> = vec![];
+        for i in 0..window_size
+        {
+            is_package_ok.push(false);
+        }
+        while first_package != last_package
+        {
+            // envia pacotes
+            for i in first_package..last_package
+            {
+                if !is_package_ok[(i-first_package) as usize]
+                {
+                    send_message(&socket, i.into(), &args[2], &lines[i as usize], p_error)?;
+                }
+            }
+
+            // recebe acks
+            for i in first_package..last_package
+            {
+                if !is_package_ok[(i-first_package) as usize]
+                {
+                    let result = receive_ack(&socket);
+                    match result
+                    {
+                        Ok(pack_number) =>
+                        {
+                            is_package_ok[(pack_number-first_package) as usize] = true;
+                        },
+                        Err(e) => println!("{}", e)
+                    };
+                }
+            }
+
+            // desliza janela
+            for i in 0..window_size
+            {
+                if is_package_ok.len() > 0 && is_package_ok[0]
+                {
+                    if first_package < last_package
+                    {
+                        first_package += 1;
+                        is_package_ok.remove(0);
+                    }
+                    if last_package < lines.len() as u64
+                    {
+                        last_package += 1;
+                        is_package_ok.push(false);
+                    }
+                }
+                else
+                {
+                    break;
+                }
             }
         }
     }

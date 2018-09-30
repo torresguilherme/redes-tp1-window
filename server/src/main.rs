@@ -3,6 +3,7 @@ use std::env;
 use std::fs::File;
 use std::io::{Result, Cursor, BufWriter};
 use std::io::{Error, ErrorKind};
+use std::io::prelude::*;
 use std::net::UdpSocket;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -93,9 +94,9 @@ fn main() -> Result<()>
     while true
     {
         let result = ack_message(&socket, p_error);
-            match result
+        match result
         {
-            Ok(message) => println!("{}", message),
+            Ok(message) => write!(&mut file, "{}\n", message)?,
             Err(e) => println!("{}", e)
         };
     }
