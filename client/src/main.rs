@@ -96,6 +96,15 @@ fn main() -> Result<()>
     let window_size: u16 = args[3].parse().unwrap();
     let timeout: u64 = args[4].parse().unwrap();
     let p_error: f32 = args[5].parse().unwrap();
+    let mut optim = false;
+    if args.len() == 7
+    {
+        if args[6] == "optim"
+        {
+            optim = true;
+        }
+    }
+
     // file reader
     let file = File::open(file_name)?;
     let reader = BufReader::new(file);
@@ -105,43 +114,46 @@ fn main() -> Result<()>
     let socket = UdpSocket::bind("127.0.0.1:4444")?;
     socket.set_read_timeout(Some(Duration::new(timeout, 0)))?;
 
-    // set up package queue to send
-    let mut package_queue: Vec<u64> = vec![];
-    for i in 0..window_size
+    if optim
     {
-        if (i as usize) < lines.len()
+        // set up package queue to send
+        let mut package_queue: Vec<u64> = vec![];
+        for i in 0..window_size
         {
-            package_queue.push(i.into());
-        }
-    }
-    let mut next_package: u64 = if (window_size as usize) > lines.len() { lines.len() as u64 } else { window_size as u64 };
-
-    // send packages
-    while !package_queue.is_empty()
-    {
-        for i in 0..package_queue.len()
-        {
-            send_message(&socket, package_queue[i], &args[2], &lines[package_queue[i] as usize], p_error)?;
-        }
-        // get acks
-        for i in 0..package_queue.len()
-        {
-            let result = receive_ack(&socket);
-            match result
+            if (i as usize) < lines.len()
             {
-                Ok(pack_number) =>
+                package_queue.push(i.into());
+            }
+        }
+        let mut next_package: u64 = if (window_size as usize) > lines.len() { lines.len() as u64 } else { window_size as u64 };
+
+        // send packages
+        while !package_queue.is_empty()
+        {
+            for i in 0..package_queue.len()
+            {
+                send_message(&socket, package_queue[i], &args[2], &lines[package_queue[i] as usize], p_error)?;
+            }
+            // get acks
+            for i in 0..package_queue.len()
+            {
+                let result = receive_ack(&socket);
+                match result
                 {
-                    println!("{:?} {}", package_queue, pack_number);
-                    let index = package_queue.iter().position(|&n| n == pack_number).unwrap();
-                    package_queue.remove(index);
-                    if next_package < lines.len() as u64
+                    Ok(pack_number) =>
                     {
-                        package_queue.push(next_package);
-                        next_package += 1;
-                    }
-                },
-                Err(e) => println!("{}", e)
-            };
+                        println!("{:?} {}", package_queue, pack_number);
+                        let index = package_queue.iter().position(|&n| n == pack_number).unwrap();
+                        package_queue.remove(index);
+                        if next_package < lines.len() as u64
+                        {
+                            package_queue.push(next_package);
+                            next_package += 1;
+                        }
+                    },
+                    Err(e) => println!("{}", e)
+                };
+            }
         }
     }
 

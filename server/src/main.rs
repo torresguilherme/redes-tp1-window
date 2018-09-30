@@ -87,7 +87,7 @@ fn main() -> Result<()>
     let mut file = File::create(file_name)?;
 
     // bind socket port
-    let socket = UdpSocket::bind(format!("127.0.0.1:{}", port))?;
+    let socket = UdpSocket::bind(format!("0.0.0.0:{}", port))?;
     socket.set_read_timeout(None);
 
     while true
